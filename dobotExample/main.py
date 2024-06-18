@@ -2,6 +2,7 @@ import DoBotArm as Dbt
 import socket
 import time
 import asyncio
+from asyncua import Client
 
 # function to move dice to the drop area
 def move_to_drop_area(ctrlBot, step_area, hover_area, drop_area):
@@ -64,13 +65,16 @@ def hex_to_rgb(hex_value):
 
 def get_colour_name(r_mean, g_mean, b_mean):
     threshold = 50  # Define a threshold for how close red and green should be to each other
+    # Check for blue
     if b_mean > g_mean and b_mean > r_mean:
         return "blue"
+    # Check for yellow (red is dominant and close enough to green)
+    elif r_mean > b_mean and r_mean > g_mean and abs(r_mean - g_mean) < threshold:
+        return "yellow"
+    # Check for green
     elif g_mean > r_mean and g_mean > b_mean:
         return "green"
-    elif r_mean > b_mean and g_mean > b_mean:
-        if abs(r_mean - g_mean) < threshold:
-            return "yellow"
+    # If none of the above conditions are true, default to red
     else:
         return "red"
 
@@ -155,13 +159,12 @@ async def sortDice():
 
                     if color_name in drop_areas:
                         move_to_drop_area(ctrlBot, step_area, hover_areas[color_name], drop_areas[color_name])
-
                 elif dice_choice == "q":
                     ctrlBot.dobotDisconnect()
                     break
                 else:
                     print("Unknown command")
-
+        
         elif inputCoords[0] == "q":
             ctrlBot.dobotDisconnect()
             break
