@@ -3,6 +3,44 @@ import socket
 import time
 import asyncio
 from asyncua import Client
+import pymongo
+
+# MongoDB connection URI (replace with your MongoDB URI) mongodb://vierplus:4plus@100.108.16.72:27017/
+mongo_uri = "mongodb://vierplus:4plus@100.108.16.72:27017/VM_DB"
+
+try:
+    client = pymongo.MongoClient(mongo_uri)
+    db = client.get_database()
+    collection = db.get_collection("Data_Collection")
+    print("Connected successfully!")
+except pymongo.errors.OperationFailure as e:
+    print(f"Authentication failed: {e}")
+except Exception as e:
+    print(f"Error connecting to MongoDB: {e}")
+    
+# Dice positions
+dice_positions = {
+    "1": (255, -63, 50),
+    "2": (255, -20, 50),
+    "3": (255, 16, 50),
+    "4": (255, 59, 50)
+}
+
+# Step area between home and drop areas
+step_area = (177, -182, 50)
+
+# Drop area coordinates
+drop_areas = {
+    "red": (-47, -243, -42),
+    "blue": (-6, -243, -42),
+    "green": (31, -243, -42),
+    "yellow": (73, -244, -42)
+}
+
+hover_areas = {color: (x, y) for color, (x, y, z) in drop_areas.items()}
+
+# Move to camera position
+camera_pos = (176, 215, 50)
 
 # function to move dice to the drop area
 def move_to_drop_area(ctrlBot, step_area, hover_area, drop_area):
@@ -83,37 +121,17 @@ async def sortDice():
     home_position = (255, 0, 50)
     ctrlBot = Dbt.DoBotArm(*home_position)  # Create DoBot Class Object with home position x, y, z
     ctrlBot.moveHome()
-
-    print("--- Manual Mode ---")
-    print("s - start sort mode")
-    print("q - exit manual mode")
-
+    
     while True:
+        print("--- Manual Mode ---")
+        print("s - start sort mode")
+        print("a - start continuous sort mode")
+        print("q - exit manual mode")
+        print("c - camera position")
+        
         inputCoords = input("$ ")
         if inputCoords[0] == "s":
             print("Starting...")
-
-            # Dice positions
-            dice_positions = {
-                "1": (255, -63, 50),
-                "2": (255, -20, 50),
-                "3": (255, 16, 50),
-                "4": (255, 59, 50)
-            }
-
-            # Step area between home and drop areas
-            step_area = (177, -182, 50)
-
-            # Drop area coordinates
-            drop_areas = {
-                "red": (-47, -243, -42),
-                "blue": (-6, -243, -42),
-                "green": (31, -243, -42),
-                "yellow": (73, -244, -42)
-            }
-
-            # Hover area coordinates (same x, y as drop area, z = 50)
-            hover_areas = {color: (x, y) for color, (x, y, z) in drop_areas.items()}
 
             while True:
                 print("Choose the dice to sort:")
@@ -132,8 +150,6 @@ async def sortDice():
                     ctrlBot.toggleSuction()
                     ctrlBot.pickToggle(30)
 
-                    # Move to camera position
-                    camera_pos = (200, 240, 50)
                     ctrlBot.moveArmXYZ(*camera_pos)
 
                     # Receive hex value from camera
@@ -155,19 +171,69 @@ async def sortDice():
                     temperature, humidity = await opcua_client(server_url, namespace, device_name, temperature_name, humidity_name)
                     print(f"Temperature: {temperature} °C, Humidity: {humidity} %")
 
+                    # Save data to MongoDB
+                    data_to_insert = {
+                        "measurement_timestamp": time.time(),
+                        "component_color_hex": hex_value,
+                        "component_color_name": color_name,
+                        "current_temp_c": temperature,
+                        "current_humidity": humidity
+                    }
+                    result = await collection.insert_one(data_to_insert)
+                    print(f"Data saved to MongoDB with ID: {result.inserted_id}")
+                    
                     ctrlBot.moveHome()
 
                     if color_name in drop_areas:
                         move_to_drop_area(ctrlBot, step_area, hover_areas[color_name], drop_areas[color_name])
                 elif dice_choice == "q":
                     ctrlBot.dobotDisconnect()
-                    break
+                    exit()
                 else:
                     print("Unknown command")
         
         elif inputCoords[0] == "q":
             ctrlBot.dobotDisconnect()
-            break
+            exit()
+        
+        elif inputCoords[0] == "a":
+            for i in dice_positions:
+                # Pick up dice from the chosen position
+                ctrlBot.moveArmXYZ(*dice_positions[i])
+                ctrlBot.pickToggle(-43)
+                ctrlBot.toggleSuction()
+                ctrlBot.pickToggle(30)
+
+                ctrlBot.moveArmXYZ(*camera_pos)
+
+                # Receive hex value from camera
+                host = '100.84.218.109'
+                port = 8888
+                hex_value = await tcp_client(host, port)
+
+                # Convert hex to RGB and get color name
+                r, g, b = hex_to_rgb(hex_value)
+                color_name = get_colour_name(r, g, b)
+                print(f"The dice color is: {color_name}")
+
+                # Get temperature and humidity from OPC UA server
+                server_url = "opc.tcp://100.84.218.109:4840/freeopcua/server/"
+                namespace = "VierPlus"
+                device_name = "FBS-VierPlus"
+                temperature_name = "Temperature"
+                humidity_name = "Humidity"
+                temperature, humidity = await opcua_client(server_url, namespace, device_name, temperature_name, humidity_name)
+                print(f"Temperature: {temperature} °C, Humidity: {humidity} %")
+
+                ctrlBot.moveHome()
+
+                if color_name in drop_areas:
+                    move_to_drop_area(ctrlBot, step_area, hover_areas[color_name], drop_areas[color_name])
+            exit()
+        elif inputCoords[0] == "c":
+            ctrlBot.moveArmXYZ(*camera_pos)
+            input()
+            ctrlBot.moveHome()
         else:
             print("Unknown command")
 
@@ -177,3 +243,5 @@ def main():
     asyncio.run(sortDice())
 
 main()
+
+# comment make make a change in this file?
