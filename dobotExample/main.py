@@ -1,22 +1,19 @@
+# Defined Imports
 import DoBotArm as Dbt
 import socket
 import time
 import asyncio
-from asyncua import Client
 import pymongo
+from asyncua import Client
+from datetime import datetime
 
-# MongoDB connection URI (replace with your MongoDB URI) mongodb://vierplus:4plus@100.108.16.72:27017/
-mongo_uri = "mongodb://vierplus:4plus@100.108.16.72:27017/VM_DB"
+# MongoDB connection URI (replace with your MongoDB URI
+mongo_uri = "mongodb://vierplus:4plus@100.108.16.72:27017/VM_DB?authSource=admin"
+client = pymongo.MongoClient(mongo_uri)
 
-try:
-    client = pymongo.MongoClient(mongo_uri)
-    db = client.get_database()
-    collection = db.get_collection("Data_Collection")
-    print("Connected successfully!")
-except pymongo.errors.OperationFailure as e:
-    print(f"Authentication failed: {e}")
-except Exception as e:
-    print(f"Error connecting to MongoDB: {e}")
+# Select database and collection
+db = client.get_database()
+collection = db.get_collection("Data_Collection")
     
 # Dice positions
 dice_positions = {
@@ -39,7 +36,7 @@ drop_areas = {
 
 hover_areas = {color: (x, y) for color, (x, y, z) in drop_areas.items()}
 
-# Move to camera position
+# Camera position
 camera_pos = (176, 215, 50)
 
 # function to move dice to the drop area
@@ -171,9 +168,15 @@ async def sortDice():
                     temperature, humidity = await opcua_client(server_url, namespace, device_name, temperature_name, humidity_name)
                     print(f"Temperature: {temperature} °C, Humidity: {humidity} %")
 
+                    # Get current datetime in local timezone
+                    current_datetime = datetime.now()
+
+                    # Format datetime as string with 24-hour format
+                    formatted_datetime = current_datetime.strftime('%Y-%m-%d %H:%M:%S')
+
                     # Save data to MongoDB
                     data_to_insert = {
-                        "measurement_timestamp": time.time(),
+                        "measurement_timestamp": formatted_datetime,
                         "component_color_hex": hex_value,
                         "component_color_name": color_name,
                         "current_temp_c": temperature,
@@ -191,6 +194,8 @@ async def sortDice():
                     exit()
                 else:
                     print("Unknown command")
+                    ctrlBot.moveHome()
+                    ctrlBot.dobotDisconnect()
         
         elif inputCoords[0] == "q":
             ctrlBot.dobotDisconnect()
@@ -225,6 +230,23 @@ async def sortDice():
                 temperature, humidity = await opcua_client(server_url, namespace, device_name, temperature_name, humidity_name)
                 print(f"Temperature: {temperature} °C, Humidity: {humidity} %")
 
+                # Get current datetime in local timezone
+                current_datetime = datetime.now()
+
+                # Format datetime as string with 24-hour format
+                formatted_datetime = current_datetime.strftime('%Y-%m-%d %H:%M:%S')
+
+                # Save data to MongoDB
+                data_to_insert = {
+                    "measurement_timestamp": formatted_datetime,
+                    "component_color_hex": hex_value,
+                    "component_color_name": color_name,
+                    "current_temp_c": temperature,
+                    "current_humidity": humidity
+                }
+                result = await collection.insert_one(data_to_insert)
+                print(f"Data saved to MongoDB with ID: {result.inserted_id}")
+
                 ctrlBot.moveHome()
 
                 if color_name in drop_areas:
@@ -236,6 +258,8 @@ async def sortDice():
             ctrlBot.moveHome()
         else:
             print("Unknown command")
+            ctrlBot.moveHome()
+            ctrlBot.dobotDisconnect()
 
 
 #--Main Program--
@@ -243,5 +267,3 @@ def main():
     asyncio.run(sortDice())
 
 main()
-
-# comment make make a change in this file?
