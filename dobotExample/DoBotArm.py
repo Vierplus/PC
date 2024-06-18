@@ -50,6 +50,7 @@ class DoBotArm:
 
                 dType.SetHOMECmd(self.api, temp = 0, isQueued = 1)
                 self.connected = True
+                print("Calibration.. Please Wait..")
                 return self.connected
             else:
                 print("Unable to connect")
@@ -58,8 +59,10 @@ class DoBotArm:
 
     #Returns to home location and then disconnects
     def dobotDisconnect(self):
-        self.moveHome()
-        dType.DisconnectDobot(self.api)
+        if self.api:
+            self.moveHome()
+            dType.DisconnectDobot(self.api)
+            print("Disconnected.")
 
     #Delays commands
     def commandDelay(self, lastIndex):
