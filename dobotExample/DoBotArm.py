@@ -1,7 +1,9 @@
 #!/usr/bin/env python
 
 import sys
-sys.path.insert(1,'./DLL')
+import os
+dll_directory = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'DLL')
+sys.path.insert(1, dll_directory)
 import DobotDllType as dType
 
 
@@ -50,7 +52,6 @@ class DoBotArm:
 
                 dType.SetHOMECmd(self.api, temp = 0, isQueued = 1)
                 self.connected = True
-                print("Calibration.. Please Wait..")
                 return self.connected
             else:
                 print("Unable to connect")
@@ -59,10 +60,8 @@ class DoBotArm:
 
     #Returns to home location and then disconnects
     def dobotDisconnect(self):
-        if self.api:
-            self.moveHome()
-            dType.DisconnectDobot(self.api)
-            print("Disconnected.")
+        self.moveHome()
+        dType.DisconnectDobot(self.api)
 
     #Delays commands
     def commandDelay(self, lastIndex):
@@ -107,3 +106,7 @@ class DoBotArm:
             lastIndex = dType.SetPTPCmd(self.api, dType.PTPMode.PTPMOVLXYZMode, positions[0], positions[1], itemHeight, 0)[0]
             self.picking = True
         self.commandDelay(lastIndex)
+        
+    def getpose(self):
+        pose = dType.GetPose(self.api)
+        print(pose)

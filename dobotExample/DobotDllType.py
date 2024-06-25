@@ -1,6 +1,6 @@
 from ctypes import *
 import time,  platform
-
+import os
 
 def enum(**enums):
     return type('Enum', (), enums)
@@ -456,12 +456,14 @@ DobotCommunicate = enum(
 ##################  API func   ##################
 
 def load():
-    if platform.system() == "Windows":
-        return CDLL("DobotDll.dll",  RTLD_GLOBAL) 
-    elif platform.system() == "Darwin" :
-        return CDLL("libDobotDll.dylib",  RTLD_GLOBAL)
-    else:
-        return cdll.loadLibrary("libDobotDll.so")
+    # Determine the directory where this script is located
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+
+    # Construct the full path to the DLL
+    dll_path = os.path.join(script_dir, 'DobotDll.dll')
+
+    # Load the DLL
+    return CDLL(dll_path, RTLD_GLOBAL)
     
 def dSleep(ms):
     time.sleep(ms / 1000)

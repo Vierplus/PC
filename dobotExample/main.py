@@ -5,7 +5,8 @@ import time
 import asyncio
 import pymongo
 from asyncua import Client
-from datetime import datetime
+import requests
+from datetime import datetime, timezone
 
 # MongoDB connection URI (replace with your MongoDB URI
 mongo_uri = "mongodb://vierplus:4plus@100.108.16.72:27017/VM_DB?authSource=admin"
@@ -50,6 +51,23 @@ def move_to_drop_area(ctrlBot, step_area, hover_area, drop_area):
     ctrlBot.moveArmXYZ(*step_area)
     ctrlBot.moveHome()
 
+def get_current_awattar_prices():
+    url = "https://api.awattar.at/v1/marketdata"
+    response = requests.get(url)
+    if response.status_code == 200:
+        data = response.json()
+        current_time = datetime.now(timezone.utc)
+        prices = data.get('data', [])
+
+        for price_entry in prices:
+            start_time = datetime.fromtimestamp(price_entry['start_timestamp'] / 1000, timezone.utc)
+            end_time = datetime.fromtimestamp(price_entry['end_timestamp'] / 1000, timezone.utc)
+
+            if start_time <= current_time <= end_time:
+                return price_entry['marketprice'] / 10  # Umrechnung in Cent/kWh
+    else:
+        print(f"Fehler bei der API-Abfrage: {response.status_code}")
+        return None
 
 async def opcua_client(url, namespace, device_name, temperature_name, humidity_name):
     client = Client(url=url, timeout=10)
@@ -98,22 +116,35 @@ def hex_to_rgb(hex_value):
     b = int(hex_value[4:6], 16)
     return r, g, b
 
-def get_colour_name(r_mean, g_mean, b_mean):
-    threshold = 50  # Define a threshold for how close red and green should be to each other
+def get_colour_name(r_mean, g_mean, b_mean, component_no):
+    current_price = get_current_awattar_prices()
+    if current_price is not None:
+        print(f"Aktueller Strompreis: {current_price} Cent/kWh")
+    else:
+        print("Keine aktuellen Preise verfügbar.")
+    
+    threshold = 35  # Define a threshold for how close red and green should be to each other
+    component_no += 1
     # Check for blue
     if b_mean > g_mean and b_mean > r_mean:
-        return "blue"
+        return "blue", component_no, current_price
     # Check for yellow (red is dominant and close enough to green)
-    elif r_mean > b_mean and r_mean > g_mean and abs(r_mean - g_mean) < threshold:
-        return "yellow"
+    elif r_mean > b_mean and g_mean > b_mean and abs(r_mean - g_mean) < threshold:
+        print(abs(r_mean - g_mean))
+        return "yellow", component_no, current_price
     # Check for green
     elif g_mean > r_mean and g_mean > b_mean:
-        return "green"
+        print(abs(r_mean - g_mean))
+        return "green", component_no, current_price
     # If none of the above conditions are true, default to red
     else:
-        return "red"
+        return "red", component_no, current_price
+    
 
 async def sortDice():
+
+    component_no = 0
+    
     # Move to home location
     home_position = (255, 0, 50)
     ctrlBot = Dbt.DoBotArm(*home_position)  # Create DoBot Class Object with home position x, y, z
@@ -125,6 +156,7 @@ async def sortDice():
         print("a - start continuous sort mode")
         print("q - exit manual mode")
         print("c - camera position")
+        print("ä - get color")
         
         inputCoords = input("$ ")
         if inputCoords[0] == "s":
@@ -156,7 +188,7 @@ async def sortDice():
 
                     # Convert hex to RGB and get color name
                     r, g, b = hex_to_rgb(hex_value)
-                    color_name = get_colour_name(r, g, b)
+                    color_name, component_no, current_price = get_colour_name(r, g, b, component_no)
                     print(f"The dice color is: {color_name}")
 
                     # Get temperature and humidity from OPC UA server
@@ -176,14 +208,15 @@ async def sortDice():
 
                     # Save data to MongoDB
                     data_to_insert = {
-                        "component_no": null,
+                        "current_price": current_price * 0.2,
+                        "component_no": component_no,
                         "measurement_timestamp": formatted_datetime,
                         "component_color_hex": hex_value,
                         "component_color_name": color_name,
                         "current_temp_c": temperature,
                         "current_humidity": humidity
                     }
-                    result = await collection.insert_one(data_to_insert)
+                    result = collection.insert_one(data_to_insert)
                     print(f"Data saved to MongoDB with ID: {result.inserted_id}")
                     
                     ctrlBot.moveHome()
@@ -191,8 +224,7 @@ async def sortDice():
                     if color_name in drop_areas:
                         move_to_drop_area(ctrlBot, step_area, hover_areas[color_name], drop_areas[color_name])
                 elif dice_choice == "q":
-                    ctrlBot.dobotDisconnect()
-                    exit()
+                    break
                 else:
                     print("Unknown command")
                     ctrlBot.moveHome()
@@ -219,7 +251,7 @@ async def sortDice():
 
                 # Convert hex to RGB and get color name
                 r, g, b = hex_to_rgb(hex_value)
-                color_name = get_colour_name(r, g, b)
+                color_name, component_no, current_price = get_colour_name(r, g, b, component_no)
                 print(f"The dice color is: {color_name}")
 
                 # Get temperature and humidity from OPC UA server
@@ -239,25 +271,38 @@ async def sortDice():
 
                 # Save data to MongoDB
                 data_to_insert = {
-                    "component_no": null,
+                    "current_price": current_price * 0.2,
+                    "component_no": component_no,
                     "measurement_timestamp": formatted_datetime,
                     "component_color_hex": hex_value,
                     "component_color_name": color_name,
                     "current_temp_c": temperature,
                     "current_humidity": humidity
                 }
-                result = await collection.insert_one(data_to_insert)
+                result = collection.insert_one(data_to_insert)
                 print(f"Data saved to MongoDB with ID: {result.inserted_id}")
 
                 ctrlBot.moveHome()
 
                 if color_name in drop_areas:
                     move_to_drop_area(ctrlBot, step_area, hover_areas[color_name], drop_areas[color_name])
-            exit()
+        
         elif inputCoords[0] == "c":
             ctrlBot.moveArmXYZ(*camera_pos)
             input()
             ctrlBot.moveHome()
+        
+        elif inputCoords[0] == "ä":
+                # Receive hex value from camera
+                host = '100.84.218.109'
+                port = 8888
+                hex_value = await tcp_client(host, port)
+
+                # Convert hex to RGB and get color name
+                r, g, b = hex_to_rgb(hex_value)
+                color_name, component_no, current_price = get_colour_name(r, g, b, component_no)
+                print(f"The dice color is: {color_name}")
+        
         else:
             print("Unknown command")
             ctrlBot.moveHome()
