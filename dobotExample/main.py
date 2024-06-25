@@ -176,6 +176,7 @@ async def sortDice():
 
                     # Save data to MongoDB
                     data_to_insert = {
+                        "component_no": null,
                         "measurement_timestamp": formatted_datetime,
                         "component_color_hex": hex_value,
                         "component_color_name": color_name,
@@ -238,6 +239,7 @@ async def sortDice():
 
                 # Save data to MongoDB
                 data_to_insert = {
+                    "component_no": null,
                     "measurement_timestamp": formatted_datetime,
                     "component_color_hex": hex_value,
                     "component_color_name": color_name,
