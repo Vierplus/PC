@@ -152,11 +152,11 @@ async def sortDice():
     
     while True:
         print("--- Manual Mode ---")
-        print("s - start sort mode")
-        print("a - start continuous sort mode")
-        print("q - exit manual mode")
-        print("c - camera position")
-        print("ä - get color")
+        print("s - start sort mode")               # starts the sortmode where each position can be selected one by one.
+        print("a - start continuous sort mode")    # start the sort mode where each position will be activated one after another.
+        print("q - quit program")                  # quits the whole program, used for when the Robot did not calibrate at the beginning.
+        print("c - camera position")               # Moves to camera position for setting up the camera.
+        print("ä - get color")                     # activates the camera and gives back the hex code, for testing purposes.
         
         inputCoords = input("$ ")
         if inputCoords[0] == "s":
@@ -227,10 +227,9 @@ async def sortDice():
                     break
                 else:
                     print("Unknown command")
-                    ctrlBot.moveHome()
-                    ctrlBot.dobotDisconnect()
         
         elif inputCoords[0] == "q":
+            ctrlBot.moveHome()
             ctrlBot.dobotDisconnect()
             exit()
         
@@ -302,12 +301,9 @@ async def sortDice():
                 r, g, b = hex_to_rgb(hex_value)
                 color_name, component_no, current_price = get_colour_name(r, g, b, component_no)
                 print(f"The dice color is: {color_name}")
-        
         else:
             print("Unknown command")
-            ctrlBot.moveHome()
-            ctrlBot.dobotDisconnect()
-
+            print("--------------------------------------------------------------------")
 
 #--Main Program--
 def main():
